@@ -3,7 +3,6 @@ from .models import Book
 from .serializers import ChangePasswordSerializer,SetNewPasswordSerializer,BookSerializer,BookSerializer1,UserRegisterSerializer,UserSerializer,ResetPasswordRequest
 from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404
-from LightControl import control
 from rest_framework.response import Response
 from django.core.exceptions import ObjectDoesNotExist
 from rest_framework.decorators import api_view,permission_classes,authentication_classes
@@ -13,10 +12,13 @@ from django.utils.encoding import smart_str,force_str,smart_bytes, DjangoUnicode
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.utils.http import urlsafe_base64_encode,urlsafe_base64_decode
 from django.shortcuts import render
-import jwt
+import jwt,os,subprocess
 from django.conf import settings
+from dotenv import load_dotenv
+load_dotenv()
+
 TIME_OUT = 5 #seconds
-BOOK_NOT_EXIST = Response({"status":"Book Doesn't Exist"},status=status.HTTP_204_NO_CONTENT)
+BOOK_NOT_EXIST = Response({"status":"Book Doesn't Exist"},status=status.HTTP_400_BAD_REQUEST)
 
 class Booksview(viewsets.ViewSet):
     permission_classes = [permissions.IsAuthenticated]
@@ -192,11 +194,6 @@ class VerifyEmail(generics.GenericAPIView):
         except Exception:
             return render(request,'change_password.html',context={"error":"Activation Link Expired"})
 
-
-
-
-
-
 @api_view(['GET']) #change to post later
 @permission_classes([permissions.IsAuthenticated])
 @authentication_classes([JWTAuthentication])
@@ -207,11 +204,10 @@ def pi_light_on(request,pk):
     except ObjectDoesNotExist:
         return BOOK_NOT_EXIST
     light_no = int(book.book_location) - 1
-    control.turn_light_on(light_no)
-    control.pi_lights()
-    # time.sleep(TIME_OUT)
-    # control.turn_light_off(light_no)
-    # control.pi_lights()
+    pyscript = f'from LightControl import control;import time; control.turn_light_on({light_no});control.pi_lights();time.sleep({TIME_OUT});control.turn_light_off({light_no});control.pi_lights()'
+    proc = subprocess.Popen(['sudo','python','-c', pyscript], stdin=subprocess.PIPE)
+    server_pass = bytes(os.getenv('SERVER_PASSWORD')+'\n',encoding='utf-8')
+    proc.communicate(input=server_pass)
     response = {"status":f"Light Turned on at {light_no+1}"}
     return Response(response)
 
@@ -225,11 +221,10 @@ def pi_light_off(request,pk):
     except ObjectDoesNotExist:
         return BOOK_NOT_EXIST
     light_no = int(book.book_location) - 1
-    control.turn_light_off(light_no)
-    control.pi_lights()
-    # time.sleep(TIME_OUT)
-    # control.turn_light_off(light_no)
-    # control.pi_lights()
+    pyscript = f'from LightControl import control;import time; control.turn_light_off({light_no});control.pi_lights()'
+    proc = subprocess.Popen(['sudo','python','-c', pyscript], stdin=subprocess.PIPE)
+    server_pass = bytes(os.getenv('SERVER_PASSWORD')+'\n',encoding='utf-8')
+    proc.communicate(input=server_pass)
     response = {"status":f"Light Turned off at {light_no+1}"}
     return Response(response)
 
