@@ -11,7 +11,21 @@ from django.utils.http import urlsafe_base64_encode,urlsafe_base64_decode
 from django.contrib.sites.shortcuts import get_current_site
 from django.urls import reverse
 from rest_framework_simplejwt.tokens import RefreshToken
+
+import threading
+
+class EmailThread(threading.Thread):
+    def __init__(self,email,data):
+        self.email = email
+        self.data = data
+        threading.Thread.__init__(self)
+    
+    def run(self):
+        self.email.send_email(self.data)
+
+
 UserModel = get_user_model()
+
 class BookSerializer(serializers.ModelSerializer):
     created_by = serializers.HiddenField(write_only=True,default=serializers.CurrentUserDefault())
     class Meta:
@@ -48,7 +62,8 @@ class UserRegisterSerializer(serializers.ModelSerializer):
             url = f'http://{current_site}{relativeLink}?token={token}'
             email_body = f'Hi, {user.first_name} \n Username: {user.get_username()} \n Use the link below to activate your Account \n {url}'
             data = {'email_body':email_body,"to_email":user.email,"email_subject":"Activate Email"}
-            Util.send_email(data)
+            email = Util()
+            EmailThread(email=email,data=data).start()
             return user
         else:
             raise serializers.ValidationError("Passwords do not match")
@@ -106,7 +121,8 @@ class ResetPasswordRequest(serializers.Serializer):
                 raise serializers.ValidationError("Your Email is Already Activated!")
             else:
                 raise serializers.ValidationError("Your Email is Not Activated!")
-            Util.send_email(data)
+            email = Util()
+            EmailThread(email=email,data=data).start()
             return "Email sent success"
         else:
             raise serializers.ValidationError("This Email is Not Registered!")
