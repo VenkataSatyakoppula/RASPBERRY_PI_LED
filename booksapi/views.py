@@ -15,6 +15,8 @@ from django.shortcuts import render
 import jwt,os,subprocess
 from django.conf import settings
 from dotenv import load_dotenv
+import subprocess
+import threading
 load_dotenv()
 
 TIME_OUT = 5 #seconds
@@ -194,6 +196,31 @@ class VerifyEmail(generics.GenericAPIView):
         except Exception:
             return render(request,'change_password.html',context={"error":"Activation Link Expired"})
 
+
+class LightOnThread(threading.Thread):
+    def __init__(self,light_no):
+        self.light_no = light_no
+        threading.Thread.__init__(self)
+    
+    def run(self):
+        pyscript = f'from LightControl import control;import time; control.turn_light_on({self.light_no})'
+        proc = subprocess.Popen(['sudo','python','-c', pyscript], stdin=subprocess.PIPE)
+        server_pass = bytes(os.getenv('SERVER_PASSWORD')+'\n',encoding='utf-8')
+        proc.communicate(input=server_pass)
+
+class LightOffThread(threading.Thread):
+    def __init__(self,light_no):
+        self.light_no = light_no
+        threading.Thread.__init__(self)
+    
+    def run(self):
+        pyscript = f'from LightControl import control;import time; control.turn_light_off({self.light_no})'
+        proc = subprocess.Popen(['sudo','python','-c', pyscript], stdin=subprocess.PIPE)
+        server_pass = bytes(os.getenv('SERVER_PASSWORD')+'\n',encoding='utf-8')
+        proc.communicate(input=server_pass)
+NUMBER_OF_LIGHTS = 30
+
+pixels = neopixel.NeoPixel(board.D18, NUMBER_OF_LIGHTS, brightness=1)
 @api_view(['GET']) #change to post later
 @permission_classes([permissions.IsAuthenticated])
 @authentication_classes([JWTAuthentication])
@@ -204,10 +231,8 @@ def pi_light_on(request,pk):
     except ObjectDoesNotExist:
         return BOOK_NOT_EXIST
     light_no = int(book.book_location) - 1
-    pyscript = f'from LightControl import control;import time; control.turn_light_on({light_no});control.pi_lights();time.sleep({TIME_OUT});control.turn_light_off({light_no});control.pi_lights()'
-    proc = subprocess.Popen(['sudo','python','-c', pyscript], stdin=subprocess.PIPE)
-    server_pass = bytes(os.getenv('SERVER_PASSWORD')+'\n',encoding='utf-8')
-    proc.communicate(input=server_pass)
+    LightOnThread(light_no).start()
+    #pixels[light_no] = [255,255,255]
     response = {"status":f"Light Turned on at {light_no+1}"}
     return Response(response)
 
@@ -221,10 +246,7 @@ def pi_light_off(request,pk):
     except ObjectDoesNotExist:
         return BOOK_NOT_EXIST
     light_no = int(book.book_location) - 1
-    pyscript = f'from LightControl import control;import time; control.turn_light_off({light_no});control.pi_lights()'
-    proc = subprocess.Popen(['sudo','python','-c', pyscript], stdin=subprocess.PIPE)
-    server_pass = bytes(os.getenv('SERVER_PASSWORD')+'\n',encoding='utf-8')
-    proc.communicate(input=server_pass)
+    LightOffThread(light_no).start()
     response = {"status":f"Light Turned off at {light_no+1}"}
     return Response(response)
 
